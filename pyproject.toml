@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "speaker-sep"
+version = "0.1.0"
+description = "GPU-accelerated speaker diarization with per-speaker audio export and JSON timelines"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "speaker-sep contributors" }]
+dependencies = [
+  "click>=8.1",
+  "numpy>=2.0",
+  "pydantic>=2.0",
+  "pydantic-settings>=2.0",
+  "pyannote.audio>=4.0",
+  "rich>=13.0",
+  "sounddevice>=0.4.6",
+  "soundfile>=0.12",
+  "torch>=2.2",
+  "torchaudio>=2.4",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-cov>=5.0",
+]
+
+[project.scripts]
+speaker-sep = "speaker_sep.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

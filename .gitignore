@@ -1,0 +1,30 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+env/
+.env
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# outputs
+outputs/
+*.wav
+!tests/fixtures/**/*.wav
+
+# models cache
+.cache/
+models/
+
+# IDE
+.idea/
+.vscode/
+*.swp
