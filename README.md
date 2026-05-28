@@ -43,6 +43,38 @@ Accept terms:
 speaker-sep file meeting.wav -o outputs/meeting
 ```
 
+### Crowd / public venue (`--scene crowd`)
+
+군중·공연장·광장처럼 **배경 소음이 크고 화자가 많을 때**는 `--scene crowd`를 쓰세요.  
+오디오가 모델에 **어떻게 들어가는지**를 `ingest.json`에 기록합니다.
+
+```bash
+speaker-sep file plaza_recording.wav --scene crowd -o outputs/plaza
+speaker-sep stream mic --scene crowd -o outputs/live_crowd
+speaker-sep scenes   # 프리셋 설명 보기
+```
+
+**군중 모드 ingest 경로 (요약):**
+
+```
+마이크/파일 (스테레오 가능)
+  → [1] 채널 선택: 음성 대역(300–3400Hz) 에너지가 가장 큰 채널만 사용 (평균 다운믹스 X)
+  → [2] 16 kHz 리샘플
+  → [3] 전처리: 80Hz 하이패스 + RMS 정규화 + 소프트 노이즈 게이트
+  → [4] pyannote community-1 (clustering threshold ↑ → 군중 잡음에 잘게 쪼개지는 것 완화)
+  → [5] 후처리: 0.35s 미만 발화 제거 + 발화 시간 상위 8명 dominant 화자만 유지
+  → timeline.json + speakers/*.wav
+```
+
+| 단계 | 군중에서 왜 중요한가 |
+|------|---------------------|
+| 채널 선택 | 한쪽 마이크만 바람/군중 노이즈가 클 때 평균하면 신호가 죽음 |
+| 노이즈 게이트 | 웅성거림 구간을 약화해 segmentation이 “전원 발화”로 오인하는 것을 줄임 |
+| 긴 스트림 윈도우 (20s) | 짧은 윈도우는 군중 babble에서 화자 ID가 자주 바뀜 |
+| dominant 상위 N명 | 수백 명을 전부 분리하는 것은 불가능; **가장 또렷한 화자**에 집중 |
+
+환경 변수: `SPEAKER_SEP_SCENE=crowd`
+
 ### Real-time stream
 
 ```bash

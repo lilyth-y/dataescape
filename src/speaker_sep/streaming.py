@@ -58,9 +58,15 @@ class StreamingDiarizer:
         min_samples = int(self.settings.stream_min_buffer_sec * sr)
 
         console.print(
-            f"[bold]Streaming diarization[/] window={self.settings.stream_window_sec}s "
+            f"[bold]Streaming diarization[/] scene={self.settings.scene} "
+            f"window={self.settings.stream_window_sec}s "
             f"step={self.settings.stream_step_sec}s ({device})",
         )
+        if self.settings.scene == "crowd":
+            console.print(
+                "[cyan]군중 모드:[/] 긴 윈도우 + 음성대역 채널 선택 + 짧은 발화 제거 → "
+                "군중 속 [dominant] 화자 위주 추적",
+            )
 
         for chunk in iter_stream(
             source,
@@ -101,6 +107,7 @@ class StreamingDiarizer:
                 time_offset=buffer_start_sec,
                 embedding_map=embedding_map,
                 new_embeddings=embs,
+                similarity_threshold=self.settings.merge_similarity_threshold,
             )
 
             last_infer_sample = total_samples
@@ -114,6 +121,7 @@ class StreamingDiarizer:
                     device=str(device),
                     mode="stream",
                     duration_sec=total_samples / sr,
+                    scene=self.settings.scene,
                 )
                 on_update(timeline)
                 timeline.save_json(out / "timeline.json")
@@ -131,6 +139,7 @@ class StreamingDiarizer:
             device=str(device),
             mode="stream",
             duration_sec=len(full_audio) / sr,
+            scene=self.settings.scene,
         )
 
         return export_results(

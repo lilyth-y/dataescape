@@ -5,12 +5,14 @@ from pathlib import Path
 
 import torch
 from pyannote.audio.pipelines.utils.hook import ProgressHook
+from pyannote.core import Annotation
 from rich.console import Console
 
-from speaker_sep.audio_io import load_mono
+from speaker_sep.annotation_filter import filter_short_segments, keep_dominant_speakers
 from speaker_sep.config import Settings
 from speaker_sep.device import resolve_device
 from speaker_sep.export import DiarizationResult, export_results
+from speaker_sep.ingest import AudioIngest
 from speaker_sep.models import PipelineLoadError, get_pipeline
 from speaker_sep.timeline import annotation_to_timeline
 
@@ -22,6 +24,10 @@ class OfflineDiarizer:
 
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or Settings()
+
+    def _postprocess(self, annotation: Annotation) -> Annotation:
+        ann = filter_short_segments(annotation, self.settings.min_segment_sec)
+        return keep_dominant_speakers(ann, self.settings.max_dominant_speakers)
 
     def run(
         self,
@@ -39,16 +45,25 @@ class OfflineDiarizer:
 
         try:
             pipeline = get_pipeline(self.settings)
-        except PipelineLoadError as exc:
+        except PipelineLoadError:
             raise
 
-        console.print(
-            f"[bold]Offline diarization[/] {audio_path.name} "
-            f"→ {out} ({device})",
-        )
+        ingest = AudioIngest(self.settings)
+        ingested = ingest.from_file(audio_path)
+        ingested.save_report(out / "ingest.json")
 
-        waveform, _ = load_mono(audio_path, self.settings.sample_rate)
-        duration = waveform.shape[1] / self.settings.sample_rate
+        console.print(
+            f"[bold]Offline diarization[/] scene={self.settings.scene} "
+            f"{audio_path.name} → {out} ({device})",
+        )
+        if ingested.channels_in > 1:
+            console.print(
+                f"  [cyan]군중/다채널 입력:[/] {ingested.channels_in}ch → "
+                f"선택 ch={ingested.channel_selected if ingested.channel_selected is not None else 0}",
+            )
+
+        waveform = ingested.waveform
+        duration = ingested.duration_sec
 
         kwargs: dict = {}
         if self.settings.min_speakers is not None:
@@ -56,13 +71,25 @@ class OfflineDiarizer:
         if self.settings.max_speakers is not None:
             kwargs["max_speakers"] = self.settings.max_speakers
 
-        if show_progress:
-            with ProgressHook() as hook:
-                output = pipeline(str(audio_path), hook=hook, **kwargs)
-        else:
-            output = pipeline(str(audio_path), **kwargs)
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp_path = tmp.name
+        try:
+            import soundfile as sf
 
-        annotation = output.speaker_diarization
+            audio = waveform.detach().cpu()
+            if audio.ndim == 2:
+                audio = audio[0]
+            sf.write(tmp_path, audio.numpy(), self.settings.sample_rate)
+
+            if show_progress:
+                with ProgressHook() as hook:
+                    output = pipeline(tmp_path, hook=hook, **kwargs)
+            else:
+                output = pipeline(tmp_path, **kwargs)
+        finally:
+            Path(tmp_path).unlink(missing_ok=True)
+
+        annotation = self._postprocess(output.speaker_diarization)
         timeline = annotation_to_timeline(
             annotation,
             source=str(audio_path),
@@ -71,6 +98,8 @@ class OfflineDiarizer:
             device=str(device),
             mode="file",
             duration_sec=duration,
+            scene=self.settings.scene,
+            ingest_stages=[s.name for s in ingested.stages],
         )
 
         return export_results(
@@ -86,10 +115,17 @@ class OfflineDiarizer:
         waveform: torch.Tensor,
         *,
         uri: str = "stream_buffer",
-        output_dir: str | Path | None = None,
+        sample_rate: int | None = None,
     ) -> tuple[object, Annotation]:
         """Run pipeline on in-memory audio (used by streaming)."""
         pipeline = get_pipeline(self.settings)
+        sr = sample_rate or self.settings.sample_rate
+        ingested = AudioIngest(self.settings).from_tensor(
+            waveform,
+            sr,
+            source=uri,
+            channels_in=waveform.shape[0],
+        )
         kwargs: dict = {}
         if self.settings.min_speakers is not None:
             kwargs["min_speakers"] = self.settings.min_speakers
@@ -102,11 +138,12 @@ class OfflineDiarizer:
         try:
             import soundfile as sf
 
-            audio = waveform.detach().cpu()
+            audio = ingested.waveform.detach().cpu()
             if audio.ndim == 2:
                 audio = audio[0]
             sf.write(tmp_path, audio.numpy(), self.settings.sample_rate)
             output = pipeline(tmp_path, **kwargs)
-            return output, output.speaker_diarization
+            ann = self._postprocess(output.speaker_diarization)
+            return output, ann
         finally:
             Path(tmp_path).unlink(missing_ok=True)

@@ -28,6 +28,8 @@ class DiarizationTimeline:
     pipeline: str
     device: str
     mode: str  # "file" | "stream"
+    scene: str = "default"
+    ingest_stages: list[str] = field(default_factory=list)
     duration_sec: float | None = None
     created_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat(),
@@ -53,6 +55,8 @@ class DiarizationTimeline:
                 "pipeline": self.pipeline,
                 "device": self.device,
                 "mode": self.mode,
+                "scene": self.scene,
+                "ingest_stages": self.ingest_stages,
                 "created_at": self.created_at,
             },
         }
@@ -82,6 +86,8 @@ def annotation_to_timeline(
     device: str,
     mode: str,
     duration_sec: float | None = None,
+    scene: str = "default",
+    ingest_stages: list[str] | None = None,
 ) -> DiarizationTimeline:
     segments: list[TimelineSegment] = []
     for turn, _, speaker in annotation.itertracks(yield_label=True):
@@ -107,6 +113,8 @@ def annotation_to_timeline(
         pipeline=pipeline,
         device=device,
         mode=mode,
+        scene=scene,
+        ingest_stages=ingest_stages or [],
         duration_sec=duration_sec,
     )
 

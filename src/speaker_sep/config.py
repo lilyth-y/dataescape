@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Literal
 
 from pydantic import Field
+
+from speaker_sep.scene import Scene
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,6 +28,7 @@ class Settings(BaseSettings):
         validation_alias="SPEAKER_SEP_DEVICE",
     )
     sample_rate: int = 16_000
+    scene: Scene = Field(default="default", validation_alias="SPEAKER_SEP_SCENE")
 
     # Streaming
     stream_window_sec: float = Field(default=10.0, validation_alias="SPEAKER_SEP_STREAM_WINDOW_SEC")
@@ -35,6 +38,9 @@ class Settings(BaseSettings):
     # Diarization hints (optional; unset = auto speaker count)
     min_speakers: int | None = None
     max_speakers: int | None = None
+    min_segment_sec: float = 0.0
+    max_dominant_speakers: int | None = None
+    merge_similarity_threshold: float = 0.65
 
     # Separation
     separation_frame_ms: float = 10.0
